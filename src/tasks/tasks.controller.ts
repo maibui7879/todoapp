@@ -36,9 +36,10 @@ export class TasksController {
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách công việc (Sinh Task ảo nếu có ngày)' })
   @ApiQuery({ name: 'date', required: false, type: String, example: '2026-04-12' })
+  @ApiQuery({ name: 'isCompleted', required: false, type: Boolean, example: false, description: 'Lọc theo trạng thái hoàn thành' })
   @ApiResponse({ status: 200, description: 'Danh sách công việc' })
-  findAll(@Request() req, @Query('date') date?: string) {
-    return this.tasksService.findAll(req.user.id, date);
+  findAll(@Request() req, @Query('date') date?: string, @Query('isCompleted') isCompleted?: string) {
+    return this.tasksService.findAll(req.user.id, date, isCompleted);
   }
 
   @Get(':id')

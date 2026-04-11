@@ -7,6 +7,8 @@ export enum RepeatUnit {
   NONE = 'NONE',
   DAILY = 'DAILY',
   WEEKLY = 'WEEKLY',
+  MONTHLY = 'MONTHLY',
+  YEARLY = 'YEARLY',
   FIXED_DAYS = 'FIXED_DAYS',
 }
 
