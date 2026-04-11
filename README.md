@@ -1,98 +1,38 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 📝 Todo List & Time Management API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Một hệ thống Backend mạnh mẽ được xây dựng bằng **NestJS** và **MongoDB**, cung cấp API cho ứng dụng quản lý công việc (Todo List) đa nền tảng. Hệ thống được thiết kế với kiến trúc chuẩn RESTful, hỗ trợ các tính năng nâng cao như xử lý công việc lặp lại (Virtual Interpolation) và thông báo thời gian thực (WebSockets).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 🚀 Các tính năng nổi bật (Core Features)
 
-## Description
+* **🔒 Xác thực & Phân quyền (Auth):** Bảo mật hệ thống với JSON Web Token (JWT) và mã hóa mật khẩu bằng Bcrypt.
+* **📅 Quản lý công việc thông minh (Tasks):** * Hỗ trợ tạo, đọc, sửa, xóa (CRUD) công việc.
+    * Lọc công việc theo ngày (Calendar-based filtering).
+    * **Tính năng nâng cao:** Xử lý chu kỳ lặp lại (Recurring Tasks) sử dụng kỹ thuật **Nội suy ảo (Virtual Interpolation)**, giúp hiển thị lịch trình vô hạn trên Frontend mà không làm phình to Database.
+* **🏷️ Phân loại tự động (Smart Categories):** Áp dụng logic "Find or Create", cho phép người dùng linh hoạt tạo nhãn mới trực tiếp trong lúc tạo công việc.
+* **📈 Thống kê & Chuỗi liên tục (Stats & Streaks):** Tính toán tỷ lệ hoàn thành công việc theo ngày và theo dõi chuỗi ngày hoạt động liên tục (Streaks Tracker) mà không cần cấu trúc dữ liệu game hóa phức tạp.
+* **🔔 Thông báo Thời gian thực (Real-time Notifications):** Tích hợp WebSockets (Socket.io) để đẩy thông báo "Công việc sắp đến hạn" trực tiếp đến trình duyệt/thiết bị của người dùng ngay lập tức, kết hợp với Cron Jobs chạy ngầm.
+* **📖 Tài liệu API tự động:** Tích hợp sẵn Swagger UI cho phép test API trực quan.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 🛠️ Công nghệ sử dụng (Tech Stack)
 
-## Project setup
+* **Framework:** NestJS (Node.js)
+* **Cơ sở dữ liệu:** MongoDB (MongoDB Atlas)
+* **ORM / ODM:** Mongoose
+* **Real-time:** Socket.io (`@nestjs/websockets`)
+* **Bảo mật:** Passport, JWT, Bcrypt, Class-validator
+* **Tài liệu API:** Swagger (`@nestjs/swagger`)
 
+## ⚙️ Hướng dẫn cài đặt (Installation)
+
+### 1. Yêu cầu hệ thống
+* Node.js (Phiên bản 18.x trở lên)
+* NPM hoặc Yarn
+* Tài khoản MongoDB Atlas (Hoặc MongoDB chạy local)
+
+### 2. Cài đặt thư viện
+Clone repository này về máy và chạy lệnh:
 ```bash
-$ npm install
-```
+npm install
 
-## Compile and run the project
-
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
-```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### 3. Swagger
+Truy cập: http://localhost:3000/api#/
