@@ -5,7 +5,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
+   app.enableCors();
   // Bật tính năng validate dữ liệu toàn cầu
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true, // Tự động loại bỏ các trường dữ liệu rác
