@@ -32,7 +32,7 @@ export class AuthService {
       fullName,
     });
 
-    return { message: 'Đăng ký thành công', userId: newUser._id };
+    return { message: 'Đăng ký thành công', userId: newUser._id, };
   }
 
   // 2. Logic Đăng nhập
