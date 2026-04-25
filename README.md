@@ -1,3 +1,12 @@
+
+---
+title: Todo App
+emoji: 🚀
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
 # 📝 Todo List & Time Management API
 
 Một hệ thống Backend mạnh mẽ được xây dựng bằng **NestJS** và **MongoDB**, cung cấp API cho ứng dụng quản lý công việc (Todo List) đa nền tảng. Hệ thống được thiết kế với kiến trúc chuẩn RESTful, hỗ trợ các tính năng nâng cao như xử lý công việc lặp lại (Virtual Interpolation) và thông báo thời gian thực (WebSockets).
