@@ -130,7 +130,7 @@ export class TasksService {
   }
 
   // Hàm Toán học kiểm tra chu kỳ
-  private checkIfDateMatchesRule(targetDate: Date, master: any): boolean {
+  public checkIfDateMatchesRule(targetDate: Date, master: any): boolean {
     const start = new Date(master.startDate);
     start.setUTCHours(0,0,0,0);
     const target = new Date(targetDate);

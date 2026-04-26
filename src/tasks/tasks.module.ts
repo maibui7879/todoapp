@@ -14,5 +14,6 @@ import { Category, CategorySchema } from '../categories/entities/category.entity
   ],
   controllers: [TasksController],
   providers: [TasksService],
+  exports: [TasksService],
 })
 export class TasksModule {}

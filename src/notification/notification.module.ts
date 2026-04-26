@@ -5,14 +5,15 @@ import { NotificationController } from './notification.controller';
 import { NotificationGateway } from './notification.gateway'; // Import Gateway
 import { Notification, NotificationSchema } from './entities/notification.entity';
 import { Task, TaskSchema } from '../tasks/entities/task.entity';
-
+import { TasksModule } from '../tasks/tasks.module'; // Import TasksModule để dùng chung TaskService trong CronJob
 @Module({
   imports: [
     // Phải import cả TaskSchema thì CronJob mới tìm được Task
     MongooseModule.forFeature([
       { name: Notification.name, schema: NotificationSchema },
       { name: Task.name, schema: TaskSchema }
-    ])
+    ]),
+    TasksModule,
   ],
   controllers: [NotificationController],
   providers: [NotificationService, NotificationGateway], // Cung cấp Gateway cho Module
