@@ -41,13 +41,22 @@ export class Task {
 
   @Prop({ type: Types.ObjectId, ref: 'Task' })
   masterId?: Types.ObjectId; // Trỏ về bản ghi gốc nếu đây là task THẬT được tạo từ task ẢO
-  // ----------------------------------------------------------------
+  
+  @Prop({ required: false })
+  endRepeatDate?: Date;
+
+  // THÊM MỚI: Mảng lưu các ngày lặp lại trong tuần (0 = Chủ nhật, 1 = Thứ 2, ..., 6 = Thứ 7)
+  @Prop({ type: [Number], default: [] })
+  repeatDays?: number[];
 
   @Prop({ type: Types.ObjectId, ref: 'Category' })
   categoryId?: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId!: Types.ObjectId;
+
+  @Prop({ default: false })
+  isImportant!: boolean;
 }
 
 export const TaskSchema = SchemaFactory.createForClass(Task);

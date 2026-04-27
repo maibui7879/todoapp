@@ -33,13 +33,18 @@ export class TasksController {
   }
   // ------------------------------------------
 
-  @Get()
-  @ApiOperation({ summary: 'Lấy danh sách công việc (Sinh Task ảo nếu có ngày)' })
-  @ApiQuery({ name: 'date', required: false, type: String, example: '2026-04-12' })
-  @ApiQuery({ name: 'isCompleted', required: false, type: Boolean, example: false, description: 'Lọc theo trạng thái hoàn thành' })
-  @ApiResponse({ status: 200, description: 'Danh sách công việc' })
-  findAll(@Request() req, @Query('date') date?: string, @Query('isCompleted') isCompleted?: string) {
-    return this.tasksService.findAll(req.user.id, date, isCompleted);
+@Get()
+  @ApiOperation({ summary: 'Lấy danh sách công việc theo khoảng thời gian' })
+  @ApiQuery({ name: 'startDate', required: false, type: String, example: '2026-04-01' })
+  @ApiQuery({ name: 'endDate', required: false, type: String, example: '2026-04-30' })
+  @ApiQuery({ name: 'isCompleted', required: false, type: Boolean })
+  findAll(
+    @Request() req, 
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('isCompleted') isCompleted?: string
+  ) {
+    return this.tasksService.findAll(req.user.id, startDate, endDate, isCompleted);
   }
 
   @Get(':id')
@@ -61,5 +66,15 @@ export class TasksController {
   @ApiResponse({ status: 200, description: 'Công việc được xóa' })
   remove(@Request() req, @Param('id') id: string) {
     return this.tasksService.remove(id, req.user.id);
+  }
+
+  @Patch(':id/important')
+  @ApiOperation({ summary: 'Đánh dấu quan trọng (Tự động Realize nếu là Task ảo)' })
+  markAsImportant(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('isImportant') isImportant: boolean,
+  ) {
+    return this.tasksService.markAsImportant(id, req.user.id, isImportant);
   }
 }

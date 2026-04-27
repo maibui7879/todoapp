@@ -48,115 +48,179 @@ export class TasksService {
     return newTask.save();
   }
 
-  // 2. LẤY DANH SÁCH & SINH TASK ẢO TRÊN LỊCH
-  async findAll(userId: string, dateString?: string, isCompletedStr?: string): Promise<any[]> {
-    // Parse isCompleted filter
+  // 2. LẤY DANH SÁCH & SINH TASK ẢO TRÊN LỊCH (Hỗ trợ Duration Range)
+  async findAll(userId: string, startDateStr?: string, endDateStr?: string, isCompletedStr?: string): Promise<any[]> {
     let isCompletedFilter: boolean | undefined;
     if (isCompletedStr !== undefined) {
       isCompletedFilter = isCompletedStr === 'true';
     }
 
-    if (!dateString) {
-      // Nếu không lọc ngày, chỉ trả về các task thật (không phải quy tắc lặp)
-      const query: any = { 
-        userId: new Types.ObjectId(userId), 
-        isMaster: false 
-      };
-      if (isCompletedFilter !== undefined) {
-        query.isCompleted = isCompletedFilter;
-      }
+    if (!startDateStr) {
+      const query: any = { userId: new Types.ObjectId(userId), isMaster: false };
+      if (isCompletedFilter !== undefined) query.isCompleted = isCompletedFilter;
       return this.taskModel.find(query).populate('categoryId', 'name color').sort({ dueDate: 1 }).lean().exec();
     }
 
-    const targetDate = new Date(dateString);
-    const startOfDay = new Date(targetDate);
-    startOfDay.setUTCHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setUTCHours(23, 59, 59, 999);
+    const startRange = new Date(startDateStr);
+    startRange.setUTCHours(0, 0, 0, 0);
+    
+    const endRange = endDateStr ? new Date(endDateStr) : new Date(startDateStr);
+    endRange.setUTCHours(23, 59, 59, 999);
 
-    // Bước A: Lấy các task THẬT trong ngày hôm đó
+    // Bước A: Lấy TẤT CẢ task THẬT trong khoảng thời gian (CHƯA LỌC isCompleted)
     const realTasksQuery: any = {
       userId: new Types.ObjectId(userId),
       isMaster: false,
-      dueDate: { $gte: startOfDay, $lte: endOfDay }
+      dueDate: { $gte: startRange, $lte: endRange }
     };
-    if (isCompletedFilter !== undefined) {
-      realTasksQuery.isCompleted = isCompletedFilter;
-    }
-    const realTasks = await this.taskModel.find(realTasksQuery).populate('categoryId', 'name color').lean().exec();
+    
+    const allRealTasksInRange = await this.taskModel.find(realTasksQuery).populate('categoryId', 'name color').lean().exec();
 
-    // Lấy ID của các Master Task đã được "thực hóa" trong ngày hôm nay để tránh trùng lặp
-    const realizedMasterIds = realTasks.map(t => t.masterId?.toString()).filter(id => id);
+    // Lọc riêng một mảng để trả về cho Client
+    const realTasksToReturn = isCompletedFilter !== undefined
+      ? allRealTasksInRange.filter(t => t.isCompleted === isCompletedFilter)
+      : allRealTasksInRange;
 
     // Bước B: Lấy các Master Task còn hiệu lực
     const masterTasks = await this.taskModel.find({
       userId: new Types.ObjectId(userId),
       isMaster: true,
-      startDate: { $lte: targetDate } 
+      startDate: { $lte: endRange } 
     }).populate('categoryId', 'name color').lean().exec();
 
     const virtualTasks: any[] = [];
 
-    // Bước C: Tính toán nội suy ảo
-    for (const master of masterTasks) {
-      // Bỏ qua nếu ngày hôm nay User đã check/sửa cái task ảo này thành thật rồi
-      if (realizedMasterIds.includes(master._id.toString())) continue;
+    // Bước C: Tính toán nội suy ảo qua từng ngày trong Range
+    let currentDate = new Date(startRange);
+    
+    while (currentDate <= endRange) {
+      for (const master of masterTasks) {
+        // Kiểm tra xem Master Task này đã bị "thực hóa" VÀO CHÍNH NGÀY ĐANG XÉT chưa
+        const isRealizedOnThisDay = allRealTasksInRange.some(rt => 
+          rt.masterId?.toString() === master._id.toString() &&
+          new Date(rt.dueDate).getUTCDate() === currentDate.getUTCDate() &&
+          new Date(rt.dueDate).getUTCMonth() === currentDate.getUTCMonth() &&
+          new Date(rt.dueDate).getUTCFullYear() === currentDate.getUTCFullYear()
+        );
 
-      if (this.checkIfDateMatchesRule(targetDate, master)) {
-        // Khôi phục lại giờ phút ban đầu của Master Task cho ngày mới
-        const virtualDueDate = new Date(targetDate);
-        const originalTime = new Date(master.dueDate);
-        virtualDueDate.setUTCHours(originalTime.getUTCHours(), originalTime.getUTCMinutes(), 0, 0);
+        if (isRealizedOnThisDay) continue;
 
-        const virtualTask = {
-          _id: `virtual_${master._id}_${targetDate.getTime()}`, 
-          title: master.title,
-          description: master.description,
-          dueDate: virtualDueDate,
-          isCompleted: false,
-          categoryId: master.categoryId,
-          isVirtual: true, 
-          masterId: master._id 
-        };
+        if (this.checkIfDateMatchesRule(currentDate, master)) {
+          const virtualDueDate = new Date(currentDate);
+          const originalTime = new Date(master.dueDate);
+          virtualDueDate.setUTCHours(originalTime.getUTCHours(), originalTime.getUTCMinutes(), 0, 0);
 
-        // Áp dụng filter isCompleted cho virtual tasks
-        if (isCompletedFilter === undefined || virtualTask.isCompleted === isCompletedFilter) {
-          virtualTasks.push(virtualTask);
+          const virtualTask = {
+            _id: `virtual_${master._id}_${currentDate.getTime()}`, 
+            title: master.title,
+            description: master.description,
+            dueDate: virtualDueDate,
+            isCompleted: false,
+            isImportant: master.isImportant ?? false, 
+            categoryId: master.categoryId,
+            isVirtual: true, 
+            masterId: master._id 
+          };
+
+          if (isCompletedFilter === undefined || virtualTask.isCompleted === isCompletedFilter) {
+            virtualTasks.push(virtualTask);
+          }
         }
       }
+      
+      // Tăng lên 1 ngày để quét tiếp
+      currentDate.setUTCDate(currentDate.getUTCDate() + 1);
     }
 
-    return [...realTasks, ...virtualTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    return [...realTasksToReturn, ...virtualTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }
 
-  // Hàm Toán học kiểm tra chu kỳ
+  // 3. ĐÁNH DẤU QUAN TRỌNG (HỖ TRỢ TỰ ĐỘNG TÁCH TASK ẢO)
+  async markAsImportant(id: string, userId: string, isImportant: boolean): Promise<Task> {
+    if (id.startsWith('virtual_')) {
+      const parts = id.split('_');
+      if (parts.length !== 3) {
+        throw new BadRequestException('ID Task ảo không hợp lệ');
+      }
+      
+      const masterId = parts[1];
+      const timestamp = parseInt(parts[2], 10);
+      const dueDate = new Date(timestamp);
+
+      const masterTask = await this.taskModel.findById(masterId).exec();
+      if (!masterTask || masterTask.userId.toString() !== userId) {
+        throw new NotFoundException('Quy tắc lặp lại không tồn tại');
+      }
+
+      const realTask = new this.taskModel({
+        title: masterTask.title,
+        description: masterTask.description,
+        dueDate: dueDate,
+        isCompleted: false, 
+        isImportant: isImportant, 
+        isMaster: false,
+        masterId: masterTask._id,
+        categoryId: masterTask.categoryId,
+        userId: new Types.ObjectId(userId),
+      });
+
+      return realTask.save();
+    } 
+    else {
+      const updatedTask = await this.taskModel.findOneAndUpdate(
+        { _id: new Types.ObjectId(id), userId: new Types.ObjectId(userId) },
+        { $set: { isImportant } },
+        { new: true }
+      ).populate('categoryId', 'name color').exec();
+
+      if (!updatedTask) {
+        throw new NotFoundException('Không tìm thấy công việc để cập nhật');
+      }
+      return updatedTask;
+    }
+  }
+
+  // 4. KIỂM TRA CHU KỲ (THUẬT TOÁN)
   public checkIfDateMatchesRule(targetDate: Date, master: any): boolean {
     const start = new Date(master.startDate);
     start.setUTCHours(0,0,0,0);
     const target = new Date(targetDate);
     target.setUTCHours(0,0,0,0);
     
+    // 1. Kiểm tra ngày bắt đầu
+    if (target < start) return false;
+
+    // 2. Kiểm tra ngày kết thúc chuỗi lặp
+    if (master.endRepeatDate) {
+      const endRepeat = new Date(master.endRepeatDate);
+      endRepeat.setUTCHours(23, 59, 59, 999); 
+      if (target > endRepeat) return false;
+    }
+
     const diffTime = target.getTime() - start.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays < 0) return false;
-
     switch (master.repeatUnit) {
       case RepeatUnit.DAILY:
-      case RepeatUnit.FIXED_DAYS:
         return diffDays % master.repeatInterval === 0;
+      
+      case RepeatUnit.FIXED_DAYS: {
+        const targetDayOfWeek = target.getUTCDay(); // 0 là CN, 1 là T2...
+        if (master.repeatDays && master.repeatDays.length > 0) {
+          return master.repeatDays.includes(targetDayOfWeek);
+        }
+        return false;
+      }
       
       case RepeatUnit.WEEKLY:
         return diffDays % (7 * master.repeatInterval) === 0;
       
-      // LOGIC THÁNG
       case RepeatUnit.MONTHLY: {
-        if (start.getUTCDate() !== target.getUTCDate()) return false; // Khác ngày trong tháng -> Bỏ qua
+        if (start.getUTCDate() !== target.getUTCDate()) return false; 
         const monthDiff = (target.getUTCFullYear() - start.getUTCFullYear()) * 12 + (target.getUTCMonth() - start.getUTCMonth());
         return monthDiff % master.repeatInterval === 0;
       }
       
-      // LOGIC NĂM
       case RepeatUnit.YEARLY: {
         if (start.getUTCDate() !== target.getUTCDate() || start.getUTCMonth() !== target.getUTCMonth()) return false;
         const yearDiff = target.getUTCFullYear() - start.getUTCFullYear();
@@ -168,19 +232,19 @@ export class TasksService {
     }
   }
 
-  // 3. BIẾN TASK ẢO THÀNH THẬT KHI USER TƯƠNG TÁC (TICK HOÀN THÀNH HOẶC CẬP NHẬT)
+  // 5. BIẾN TASK ẢO THÀNH THẬT KHI USER TƯƠNG TÁC
   async realizeVirtualTask(userId: string, masterId: string, dueDate: string, updateData: UpdateTaskDto): Promise<Task> {
     const masterTask = await this.taskModel.findById(masterId).exec();
     if (!masterTask || masterTask.userId.toString() !== userId) {
       throw new NotFoundException('Quy tắc lặp lại không tồn tại');
     }
 
-    // Tạo ra một Task thật cho ngày hôm đó, trỏ về Master Task
     const realTask = new this.taskModel({
       title: updateData.title || masterTask.title,
       description: updateData.description || masterTask.description,
       dueDate: new Date(dueDate),
       isCompleted: updateData.isCompleted ?? false,
+      isImportant: updateData.isImportant ?? masterTask.isImportant ?? false, // Lấy cờ quan trọng chuẩn
       isMaster: false,
       masterId: masterTask._id,
       categoryId: masterTask.categoryId,
@@ -190,9 +254,8 @@ export class TasksService {
     return realTask.save();
   }
 
-  // 4. CẬP NHẬT TASK BÌNH THƯỜNG
+  // 6. CẬP NHẬT TASK BÌNH THƯỜNG
   async update(id: string, userId: string, updateTaskDto: UpdateTaskDto): Promise<Task> {
-    // Guard: Bảo vệ không cho sửa Virtual Task
     if (id.startsWith('virtual_')) {
       throw new BadRequestException('Đây là Task Ảo. Bạn phải gọi API /tasks/realize/:masterId trước khi cập nhật nội dung.');
     }
@@ -222,9 +285,8 @@ export class TasksService {
     return updatedTask;
   }
 
-  // 5. XÓA TASK
+  // 7. XÓA TASK
   async remove(id: string, userId: string): Promise<{ message: string }> {
-    // Guard: Bảo vệ không cho xóa Virtual Task
     if (id.startsWith('virtual_')) {
       throw new BadRequestException('Không thể xóa một ngày lẻ của Task lặp lại theo cách này. Vui lòng gửi ID của Master Task để xóa toàn bộ chu kỳ.');
     }
@@ -234,10 +296,10 @@ export class TasksService {
     return { message: 'Đã xóa công việc thành công' };
   }
 
+  // 8. TÌM CHI TIẾT 1 TASK
   async findOne(id: string, userId: string): Promise<Task> {
     const task = await this.taskModel.findOne({ _id: new Types.ObjectId(id), userId: new Types.ObjectId(userId) }).populate('categoryId', 'name color').exec();
     if (!task) throw new NotFoundException('Không tìm thấy công việc này');
     return task;
   }
 }
-
