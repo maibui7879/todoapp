@@ -99,7 +99,6 @@ export class StatsService {
       }
     });
 
-    // 4. TÍNH TOÁN TỶ LỆ PHẦN TRĂM VÀ FORMAT KẾT QUẢ
     const completionRate = overview.total === 0 ? 0 : Math.round((overview.completed / overview.total) * 100);
 
     return {
