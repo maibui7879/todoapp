@@ -21,6 +21,9 @@ export class Notification {
   // ID của người nhận thông báo
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId!: Types.ObjectId;
+
+  @Prop({ default: false })
+  isImportant!: boolean;
 }
 
 export const NotificationSchema = SchemaFactory.createForClass(Notification);

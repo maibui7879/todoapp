@@ -13,18 +13,47 @@ export class NotificationService {
   constructor(
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
     @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
-    // 💉 Tiêm Gateway vào Service
+    //  Tiêm Gateway vào Service
     private notificationGateway: NotificationGateway, 
     private tasksService: TasksService
   ) {}
 
   // 1. API: Lấy danh sách lịch sử thông báo cho UI "Quả chuông"
-  async getUserNotifications(userId: string) {
-    return this.notificationModel
-      .find({ userId: new Types.ObjectId(userId) })
-      .sort({ createdAt: -1 }) // Mới nhất lên đầu
-      .limit(30) // Trả về 30 cái gần nhất thôi cho nhẹ
-      .exec();
+  async getHistory(userId: string, keyword?: string, taskId?: string, isImportantStr?: string): Promise<Notification[]> {
+    const query: any = { userId: new Types.ObjectId(userId) };
+
+    // Lọc theo từ khóa (Tìm kiếm tương đối không phân biệt hoa thường)
+    if (keyword) {
+      query.$or = [
+        { title: { $regex: keyword, $options: 'i' } },
+        { message: { $regex: keyword, $options: 'i' } }
+      ];
+    }
+
+    // Lọc theo taskId chính xác
+    if (taskId) {
+      query.taskId = taskId;
+    }
+
+    // Lọc theo mức độ quan trọng
+    if (isImportantStr !== undefined) {
+      query.isImportant = isImportantStr === 'true';
+    }
+
+    // Trả về tối đa 50 thông báo mới nhất
+    return this.notificationModel.find(query).sort({ createdAt: -1 }).limit(50).exec();
+  }
+
+  async markAllAsRead(userId: string): Promise<{ message: string, modifiedCount: number }> {
+    const result = await this.notificationModel.updateMany(
+      { userId: new Types.ObjectId(userId), isRead: false },
+      { $set: { isRead: true } }
+    ).exec();
+
+    return { 
+      message: 'Đã đánh dấu tất cả là đã đọc', 
+      modifiedCount: result.modifiedCount 
+    };
   }
 
   // 2. API: Đánh dấu 1 thông báo là đã đọc
@@ -61,7 +90,8 @@ export class NotificationService {
         taskId: task._id.toString(),
         title: task.title,
         dueDate: task.dueDate,
-        userId: task.userId
+        userId: task.userId,
+        isImportant: task.isImportant,
       });
     });
 
@@ -93,7 +123,8 @@ export class NotificationService {
               taskId: `virtual_${master._id}_${todayStart.getTime()}`,
               title: master.title,
               dueDate: virtualDueDate,
-              userId: master.userId
+              userId: master.userId,
+              isImportant: master.isImportant,
             });
           }
         }
@@ -106,14 +137,15 @@ export class NotificationService {
       const existingNotif = await this.notificationModel.findOne({ taskId: item.taskId });
       
       if (!existingNotif) {
-        const title = '⏰ Sắp đến hạn!';
+        const title = 'Sắp đến hạn!';
         const message = `Công việc "${item.title}" của bạn sẽ đến hạn vào lúc ${item.dueDate.getHours()}h${item.dueDate.getMinutes()}`;
 
         const newNotif = await this.notificationModel.create({
           title,
           message,
           taskId: item.taskId, 
-          userId: item.userId
+          userId: item.userId,
+          isImportant: item.isImportant,
         });
 
         this.notificationGateway.sendNotificationToUser(item.userId.toString(), newNotif);
