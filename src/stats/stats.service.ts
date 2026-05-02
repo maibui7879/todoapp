@@ -242,7 +242,10 @@ export class StatsService {
         completionRate, 
       },
       byCategory: Object.values(byCategory), 
-      chartTrend: Object.values(chartTrend), 
+      chartTrend: Object.values(chartTrend).map(item => ({
+        ...item,
+        percentage: item.total === 0 ? 0 : Math.round((item.completed / item.total) * 100)
+      })),
     };
   }
 }
