@@ -1,10 +1,113 @@
 import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { Task, TaskDocument } from '../tasks/entities/task.entity';
 import { TasksService } from '../tasks/tasks.service';
 
 @Injectable()
 export class StatsService {
-  constructor(private tasksService: TasksService) {}
+  constructor(
+    @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
+    private tasksService: TasksService
+  ) {}
 
+  // --- API MỚI: TỔNG QUAN TRỌN ĐỜI ---
+  async getOverviewStats(userId: string) {
+    const today = new Date();
+    const endOfToday = new Date(today);
+    endOfToday.setUTCHours(23, 59, 59, 999);
+
+    // 1. Chỉ lấy ngày tháng của các Task Thật ĐÃ HOÀN THÀNH (Dùng .select('dueDate') để query siêu nhanh)
+    const completedTasks = await this.taskModel.find({
+      userId: new Types.ObjectId(userId),
+      isCompleted: true,
+      isMaster: false,
+      dueDate: { $lte: endOfToday }
+    })
+    .select('dueDate')
+    .sort({ dueDate: -1 }) // Xếp mới nhất lên đầu
+    .lean()
+    .exec();
+
+    const totalTasksCompletedLifetime = completedTasks.length;
+
+    // 2. Gom nhóm các ngày lại, loại bỏ ngày trùng nhau (Ví dụ 1 ngày làm 5 việc thì chỉ tính là 1 ngày active)
+    const activeDatesStr = [...new Set(completedTasks.map(t => new Date(t.dueDate).toISOString().split('T')[0]))];
+
+    // 3. Thuật toán đếm Streak
+    let currentStreak = 0;
+    let longestStreak = 0;
+
+    if (activeDatesStr.length > 0) {
+      const todayStr = today.toISOString().split('T')[0];
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+      // --- Tính Chuỗi Hiện Tại (Current Streak) ---
+      // Nếu ngày active gần nhất là Hôm nay hoặc Hôm qua, thì chuỗi hiện tại vẫn còn sống
+      if (activeDatesStr[0] === todayStr || activeDatesStr[0] === yesterdayStr) {
+        currentStreak = 1;
+        for (let i = 0; i < activeDatesStr.length - 1; i++) {
+          const curr = new Date(activeDatesStr[i]);
+          const prev = new Date(activeDatesStr[i + 1]);
+          const diffDays = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+
+          if (diffDays === 1) {
+            currentStreak++;
+          } else {
+            break; // Khoảng cách lớn hơn 1 ngày -> Đứt chuỗi
+          }
+        }
+      }
+
+      // --- Tính Chuỗi Kỷ Lục (Longest Streak) ---
+      let tempStreak = 1;
+      longestStreak = 1;
+      for (let i = 0; i < activeDatesStr.length - 1; i++) {
+        const curr = new Date(activeDatesStr[i]);
+        const prev = new Date(activeDatesStr[i + 1]);
+        const diffDays = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 1) {
+          tempStreak++;
+          if (tempStreak > longestStreak) {
+            longestStreak = tempStreak;
+          }
+        } else {
+          tempStreak = 1; // Đứt thì reset lại từ 1
+        }
+      }
+    }
+
+    // --- 4. MỚI: TÍNH TRẠNG THÁI 7 NGÀY GẦN NHẤT ---
+    const last7DaysStatus: Array<{ date: string; dayOfWeek: number; isActive: boolean }> = [];
+    // Chạy vòng lặp từ 6 lùi về 0 để mảy xếp theo thứ tự thời gian (Cũ -> Mới)
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      
+      const dateStr = d.toISOString().split('T')[0];
+      
+      // Lấy tên thứ bằng tiếng Việt hoặc Anh (tùy FE, ở đây mình cung cấp thứ trong tuần 0-6)
+      const dayOfWeek = d.getDay(); 
+      
+      last7DaysStatus.push({
+        date: dateStr,
+        dayOfWeek: dayOfWeek, // 0: Chủ nhật, 1: T2, ..., 6: T7
+        isActive: activeDatesStr.includes(dateStr) // Kiểm tra xem ngày này có nằm trong danh sách đã làm không
+      });
+    }
+
+    return {
+      currentStreak,
+      longestStreak,
+      totalTasksCompletedLifetime,
+      last7DaysStatus
+    };
+  }
+
+  // --- API CŨ: CHI TIẾT TUẦN / THÁNG / NĂM (GIỮ NGUYÊN CODE) ---
   async getDetailedStats(userId: string, type: 'week' | 'month' | 'year', dateStr?: string) {
     // 1. TÍNH TOÁN KHOẢNG THỜI GIAN (START DATE & END DATE)
     const refDate = dateStr ? new Date(dateStr) : new Date();
