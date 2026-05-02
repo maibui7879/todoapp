@@ -10,14 +10,14 @@ import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 export class StatsController {
   constructor(private readonly statsService: StatsService) {}
 
-  // MỚI: Endpoint Tổng quan trọn đời (Đặt LÊN TRÊN)
-  @Get('overview')
-  @ApiOperation({ summary: 'Lấy thống kê tổng quan trọn đời (Streak, Tổng Task đã làm)' })
+  // Endpoint Tổng quan trọn đời (Đặt LÊN TRÊN)
+  @Get('streak')
+  @ApiOperation({ summary: 'Lấy Streak, Tổng Task đã làm' })
   getOverviewStats(@Request() req) {
     return this.statsService.getOverviewStats(req.user.id);
   }
 
-  // CŨ: Endpoint Chi tiết Tuần/Tháng/Năm (Giữ nguyên)
+  // Endpoint Chi tiết Tuần/Tháng/Năm (Giữ nguyên)
   @Get()
   @ApiOperation({ summary: 'Lấy thống kê chi tiết theo tuần, tháng hoặc năm' })
   @ApiQuery({ name: 'type', enum: ['week', 'month', 'year'], description: 'Phạm vi thống kê (week/month/year)' })

@@ -19,7 +19,6 @@ export class StatsService {
     const endOfToday = new Date(today);
     endOfToday.setUTCHours(23, 59, 59, 999);
 
-    // 1. Chỉ lấy ngày tháng của các Task Thật ĐÃ HOÀN THÀNH
     const completedTasks = await this.taskModel.find({
       userId: new Types.ObjectId(userId),
       isCompleted: true,
@@ -32,11 +31,8 @@ export class StatsService {
     .exec();
 
     const totalTasksCompletedLifetime = completedTasks.length;
-
-    // 2. Gom nhóm các ngày lại (Mảng chứa các chuỗi 'YYYY-MM-DD')
     const activeDatesStr = [...new Set(completedTasks.map(t => new Date(t.dueDate).toISOString().split('T')[0]))];
 
-    // 3. Thuật toán đếm Streak
     let currentStreak = 0;
     let longestStreak = 0;
 
@@ -46,7 +42,6 @@ export class StatsService {
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-      // Tính Chuỗi Hiện Tại
       if (activeDatesStr[0] === todayStr || activeDatesStr[0] === yesterdayStr) {
         currentStreak = 1;
         for (let i = 0; i < activeDatesStr.length - 1; i++) {
@@ -62,7 +57,6 @@ export class StatsService {
         }
       }
 
-      // Tính Chuỗi Kỷ Lục
       let tempStreak = 1;
       longestStreak = 1;
       for (let i = 0; i < activeDatesStr.length - 1; i++) {
@@ -81,7 +75,6 @@ export class StatsService {
       }
     }
 
-    // 4. Trạng thái 7 ngày gần nhất
     const last7DaysStatus: Array<{ date: string; dayOfWeek: number; isActive: boolean }> = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
@@ -106,36 +99,39 @@ export class StatsService {
   }
 
   // =========================================================================
-  // API 2: THỐNG KÊ CHI TIẾT (DÙNG ĐỂ VẼ BIỂU ĐỒ TRÊN FRONTEND)
+  // API 2: THỐNG KÊ CHI TIẾT (ROLLING 7 DAYS, 30 DAYS, 12 MONTHS)
   // =========================================================================
   async getDetailedStats(userId: string, type: 'week' | 'month' | 'year', dateStr?: string) {
-    // 1. TÍNH TOÁN KHOẢNG THỜI GIAN
+    // 1. TÍNH TOÁN KHOẢNG THỜI GIAN CUỐN CHIẾU
     const refDate = dateStr ? new Date(dateStr) : new Date();
     let startDate: Date;
     let endDate: Date;
 
     if (type === 'week') {
-      const day = refDate.getDay(); 
-      const diffToMonday = refDate.getDate() - day + (day === 0 ? -6 : 1);
-      startDate = new Date(refDate.setDate(diffToMonday));
-      startDate.setUTCHours(0, 0, 0, 0);
-
-      endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + 6);
-      endDate.setUTCHours(23, 59, 59, 999);
+      endDate = new Date(refDate);
+      endDate.setHours(23, 59, 59, 999);
+      
+      startDate = new Date(refDate);
+      startDate.setDate(startDate.getDate() - 6); // Lấy 6 ngày trước + hôm nay = 7 ngày
+      startDate.setHours(0, 0, 0, 0);
     } else if (type === 'month') {
-      startDate = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
-      startDate.setUTCHours(0, 0, 0, 0);
+      endDate = new Date(refDate);
+      endDate.setHours(23, 59, 59, 999);
+      
+      startDate = new Date(refDate);
+      startDate.setDate(startDate.getDate() - 29); // Lấy 29 ngày trước + hôm nay = 30 ngày
+      startDate.setHours(0, 0, 0, 0);
+    } else { // type === 'year'
+      // Năm: Lấy ngày cuối cùng của tháng hiện tại (của refDate)
       endDate = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
-      endDate.setUTCHours(23, 59, 59, 999);
-    } else {
-      startDate = new Date(refDate.getFullYear(), 0, 1);
-      startDate.setUTCHours(0, 0, 0, 0);
-      endDate = new Date(refDate.getFullYear(), 11, 31);
-      endDate.setUTCHours(23, 59, 59, 999);
+      endDate.setHours(23, 59, 59, 999);
+      
+      // Bắt đầu từ ngày mùng 1 của 11 tháng trước đó (Tổng cộng 12 tháng)
+      startDate = new Date(refDate.getFullYear(), refDate.getMonth() - 11, 1);
+      startDate.setHours(0, 0, 0, 0);
     }
 
-    // 2. GỌI TASKS SERVICE ĐỂ LẤY TOÀN BỘ DATA (THẬT + ẢO)
+    // 2. LẤY DATA
     const tasks = await this.tasksService.findAll(
       userId,
       startDate.toISOString(),
@@ -143,7 +139,6 @@ export class StatsService {
     );
 
     const now = new Date();
-
     const overview = {
       total: tasks.length,
       completed: 0,
@@ -155,38 +150,42 @@ export class StatsService {
     const byCategory: Record<string, { count: number; name: string; color: string; completed: number }> = {};
     const chartTrend: Record<string, { label: string; total: number; completed: number }> = {};
 
-    // 3. KHỞI TẠO BUCKET BIỂU ĐỒ (DỰA TRÊN TYPE)
-    if (type === 'week') {
+    // 3. KHỞI TẠO BUCKET BIỂU ĐỒ MỚI
+    if (type === 'week' || type === 'month') {
+      // Tuần và Tháng bây giờ đều chia theo từng ngày
       let curr = new Date(startDate);
       while (curr <= endDate) {
-        const dateKey = curr.toISOString().split('T')[0];
-        chartTrend[dateKey] = { label: dateKey, total: 0, completed: 0 };
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        const d = String(curr.getDate()).padStart(2, '0');
+        
+        const dateKey = `${y}-${m}-${d}`;
+        // FE sẽ nhận label gọn gàng như "04/05", "05/05" để vẽ trục X cho đẹp
+        const label = `${d}/${m}`; 
+
+        chartTrend[dateKey] = { label, total: 0, completed: 0 };
         curr.setDate(curr.getDate() + 1);
       }
-    } else if (type === 'month') {
-      const monthStr = (startDate.getMonth() + 1).toString().padStart(2, '0');
-      const lastDay = endDate.getDate();
-
-      chartTrend['W1'] = { label: `Tuần 1 (01/${monthStr} - 07/${monthStr})`, total: 0, completed: 0 };
-      chartTrend['W2'] = { label: `Tuần 2 (08/${monthStr} - 14/${monthStr})`, total: 0, completed: 0 };
-      chartTrend['W3'] = { label: `Tuần 3 (15/${monthStr} - 21/${monthStr})`, total: 0, completed: 0 };
-      chartTrend['W4'] = { label: `Tuần 4 (22/${monthStr} - 28/${monthStr})`, total: 0, completed: 0 };
-      
-      if (lastDay > 28) {
-        chartTrend['W5'] = { label: `Tuần 5 (29/${monthStr} - ${lastDay}/${monthStr})`, total: 0, completed: 0 };
-      }
     } else if (type === 'year') {
+      // Năm chia theo từng tháng
+      let curr = new Date(startDate);
       for (let i = 0; i < 12; i++) {
-        chartTrend[`M${i + 1}`] = { label: `Tháng ${i + 1}`, total: 0, completed: 0 };
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        
+        const monthKey = `${y}-${m}`;
+        const label = `${m}/${y}`; // Nhãn "05/2026"
+
+        chartTrend[monthKey] = { label, total: 0, completed: 0 };
+        curr.setMonth(curr.getMonth() + 1);
       }
     }
 
     // 4. QUÉT DATA VÀ PHÂN BỔ
     tasks.forEach(task => {
       const taskDate = new Date(task.dueDate);
-      const dateKey = taskDate.toISOString().split('T')[0];
-
-      // A. Cập nhật Overview
+      
+      // Cập nhật Overview
       if (task.isCompleted) {
         overview.completed++;
       } else {
@@ -195,7 +194,7 @@ export class StatsService {
       }
       if (task.isImportant) overview.important++;
 
-      // B. Cập nhật Category
+      // Cập nhật Category
       const catId = task.categoryId?._id?.toString() || 'unassigned';
       if (!byCategory[catId]) {
         byCategory[catId] = {
@@ -208,19 +207,16 @@ export class StatsService {
       byCategory[catId].count++;
       if (task.isCompleted) byCategory[catId].completed++;
 
-      // C. Phân bổ vào Bucket Biểu đồ
+      // Phân bổ vào Bucket
+      const y = taskDate.getFullYear();
+      const m = String(taskDate.getMonth() + 1).padStart(2, '0');
+      const d = String(taskDate.getDate()).padStart(2, '0');
+      
       let bucketKey = '';
-      if (type === 'week') {
-        bucketKey = dateKey;
-      } else if (type === 'month') {
-        const dateNum = taskDate.getDate();
-        if (dateNum <= 7) bucketKey = 'W1';
-        else if (dateNum <= 14) bucketKey = 'W2';
-        else if (dateNum <= 21) bucketKey = 'W3';
-        else if (dateNum <= 28) bucketKey = 'W4';
-        else bucketKey = 'W5'; 
+      if (type === 'week' || type === 'month') {
+        bucketKey = `${y}-${m}-${d}`; // Rơi vào đúng ngày
       } else if (type === 'year') {
-        bucketKey = `M${taskDate.getMonth() + 1}`;
+        bucketKey = `${y}-${m}`; // Rơi vào đúng tháng
       }
 
       if (chartTrend[bucketKey]) {
