@@ -34,19 +34,30 @@ export class TasksController {
   // ------------------------------------------
 
 @Get()
-  @ApiOperation({ summary: 'Lấy danh sách công việc theo khoảng thời gian' })
+  @ApiOperation({ summary: 'Lấy danh sách công việc (hỗ trợ bộ lọc)' })
   @ApiQuery({ name: 'startDate', required: false, type: String, example: '2026-04-01' })
   @ApiQuery({ name: 'endDate', required: false, type: String, example: '2026-04-30' })
   @ApiQuery({ name: 'isCompleted', required: false, type: Boolean })
+  @ApiQuery({ name: 'isImportant', required: false, type: Boolean, description: 'Lọc task quan trọng (gắn sao)' })
+  @ApiQuery({ name: 'isOverdue', required: false, type: Boolean, description: 'Lọc task quá hạn & chưa hoàn thành' })
   findAll(
     @Request() req, 
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
-    @Query('isCompleted') isCompleted?: string
+    @Query('isCompleted') isCompleted?: string,
+    @Query('isImportant') isImportant?: string,
+    @Query('isOverdue') isOverdue?: string
   ) {
-    return this.tasksService.findAll(req.user.id, startDate, endDate, isCompleted);
+    return this.tasksService.findAll(
+      req.user.id, 
+      startDate, 
+      endDate, 
+      isCompleted, 
+      isImportant, 
+      isOverdue
+    );
   }
-
+  
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết một công việc' })
   @ApiResponse({ status: 200, description: 'Chi tiết công việc' })
