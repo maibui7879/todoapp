@@ -12,6 +12,10 @@ export class NotificationController {
 
 @Get()
   @ApiOperation({ summary: 'Lấy danh sách thông báo (Hỗ trợ tìm kiếm và lọc)' })
+  // CẬP NHẬT: Đặt required: false cho các Query parameters trên Swagger
+  @ApiQuery({ name: 'keyword', required: false, type: String, description: 'Từ khóa tìm kiếm' })
+  @ApiQuery({ name: 'taskId', required: false, type: String, description: 'Lọc theo ID công việc' })
+  @ApiQuery({ name: 'isImportant', required: false, type: Boolean, description: 'Lọc thông báo quan trọng' })
   findAll(
     @Request() req,
     @Query('keyword') keyword?: string,
