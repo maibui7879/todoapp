@@ -115,6 +115,7 @@ export class TasksService {
       }).populate('categoryId', 'name color').lean().exec();
 
       const virtualTasks: any[] = [];
+      const realizedTasks: Task[] = [];
 
       // B3: Tính toán nội suy ảo qua từng ngày trong Range
       let currentDate = new Date(startRange);
@@ -160,7 +161,25 @@ export class TasksService {
           }
 
           if (keep) {
-            virtualTasks.push(virtualTask);
+            // Nếu là overdue filter, tự động realize task ảo thành task thật
+            if (isOverdueFilter) {
+              const realTask = new this.taskModel({
+                title: master.title,
+                description: master.description,
+                dueDate: virtualDueDate,
+                isCompleted: false,
+                isImportant: master.isImportant ?? false,
+                isMaster: false,
+                masterId: master._id,
+                categoryId: master.categoryId,
+                userId: new Types.ObjectId(userId),
+              });
+              const savedTask = await realTask.save();
+              const populatedTask = await this.taskModel.findById(savedTask._id).populate('categoryId', 'name color').exec();
+              realizedTasks.push(populatedTask as Task);
+            } else {
+              virtualTasks.push(virtualTask);
+            }
           }
         }
       }
@@ -169,7 +188,7 @@ export class TasksService {
       currentDate.setUTCDate(currentDate.getUTCDate() + 1);
     }
 
-    return [...realTasksToReturn, ...virtualTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    return [...realTasksToReturn, ...virtualTasks, ...realizedTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }
 
   // 3. ĐÁNH DẤU QUAN TRỌNG (HỖ TRỢ TỰ ĐỘNG TÁCH TASK ẢO)
