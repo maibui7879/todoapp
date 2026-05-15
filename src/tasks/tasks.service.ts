@@ -13,12 +13,30 @@ export class TasksService {
     @InjectModel(Category.name) private categoryModel: Model<CategoryDocument>,
   ) {}
 
-  // 1. TẠO CÔNG VIỆC MỚI
-  async create(userId: string, createTaskDto: CreateTaskDto): Promise<Task> {
+async create(userId: string, createTaskDto: CreateTaskDto): Promise<Task> {
     const { categoryName, ...taskData } = createTaskDto;
+
+    // --- THÊM VALIDATION KHÔNG CHO PHÉP TẠO TASK TRONG QUÁ KHỨ ---
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0); // Đưa về mốc 0h00 để cho phép tạo task trong ngày hiện tại
+
+    const taskDueDateCompare = new Date(taskData.dueDate);
+    taskDueDateCompare.setUTCHours(0, 0, 0, 0);
+
+    if (taskDueDateCompare < today) {
+      throw new BadRequestException('Không được phép tạo công việc với ngày đến hạn (dueDate) trong quá khứ.');
+    }
+
+    // Nếu là Task lặp lại có truyền startDate, cũng không được để startDate trong quá khứ
+    if (taskData.isMaster && taskData.startDate) {
+      const taskStartDate = new Date(taskData.startDate);
+      taskStartDate.setUTCHours(0, 0, 0, 0);
+      if (taskStartDate < today) {
+        throw new BadRequestException('Không được phép đặt ngày bắt đầu chu kỳ lặp (startDate) trong quá khứ.');
+      }
+    }
     let finalCategoryId: Types.ObjectId | undefined = undefined;
 
-    // Xử lý Category Find-or-Create
     if (categoryName) {
       let category = await this.categoryModel.findOne({
         userId: new Types.ObjectId(userId),
@@ -35,7 +53,6 @@ export class TasksService {
       finalCategoryId = category._id as Types.ObjectId;
     }
 
-    // Nếu là Master Task, lưu startDate là ngày dueDate ban đầu
     const startDate = taskData.isMaster ? new Date(taskData.dueDate) : undefined;
 
     const newTask = new this.taskModel({
@@ -48,7 +65,6 @@ export class TasksService {
     return newTask.save();
   }
 
-  // 2. LẤY DANH SÁCH & SINH TASK ẢO TRÊN LỊCH (Hỗ trợ Duration Range)
   async findAll(
       userId: string, 
       startDateStr?: string, 
@@ -57,12 +73,10 @@ export class TasksService {
       isImportantStr?: string,
       isOverdueStr?: string
     ): Promise<any[]> {
-      // Parser filters
       const isCompletedFilter = isCompletedStr !== undefined ? isCompletedStr === 'true' : undefined;
       const isImportantFilter = isImportantStr !== undefined ? isImportantStr === 'true' : undefined;
       const isOverdueFilter = isOverdueStr !== undefined ? isOverdueStr === 'true' : undefined;
 
-      // A. NẾU KHÔNG CÓ TRUYỀN NGÀY (Chỉ query DB lấy list bình thường)
       if (!startDateStr) {
         const query: any = { userId: new Types.ObjectId(userId), isMaster: false };
         
@@ -77,14 +91,12 @@ export class TasksService {
         return this.taskModel.find(query).populate('categoryId', 'name color').sort({ dueDate: 1 }).lean().exec();
       }
 
-      // B. NẾU CÓ RANGE TIME (Xử lý tính toán sinh Task ảo lặp lại)
       const startRange = new Date(startDateStr);
       startRange.setUTCHours(0, 0, 0, 0);
       
       const endRange = endDateStr ? new Date(endDateStr) : new Date(startDateStr);
       endRange.setUTCHours(23, 59, 59, 999);
 
-      // B1: Lấy TẤT CẢ task THẬT trong khoảng thời gian (CHƯA LỌC ĐIỀU KIỆN)
       const realTasksQuery: any = {
         userId: new Types.ObjectId(userId),
         isMaster: false,
@@ -107,7 +119,6 @@ export class TasksService {
         realTasksToReturn = realTasksToReturn.filter(t => !t.isCompleted && new Date(t.dueDate) < now);
       }
 
-      // B2: Lấy các Master Task còn hiệu lực
       const masterTasks = await this.taskModel.find({
         userId: new Types.ObjectId(userId),
         isMaster: true,
@@ -141,7 +152,7 @@ export class TasksService {
             title: master.title,
             description: master.description,
             dueDate: virtualDueDate,
-            isCompleted: false, // Task ảo mặc định luôn là false
+            isCompleted: false, 
             isImportant: master.isImportant ?? false, 
             categoryId: master.categoryId,
             isVirtual: true, 
@@ -161,7 +172,7 @@ export class TasksService {
           }
 
           if (keep) {
-            // Nếu là overdue filter, tự động realize task ảo thành task thật
+
             if (isOverdueFilter) {
               const realTask = new this.taskModel({
                 title: master.title,
@@ -183,15 +194,13 @@ export class TasksService {
           }
         }
       }
-      
-      // Tăng lên 1 ngày để quét tiếp
+
       currentDate.setUTCDate(currentDate.getUTCDate() + 1);
     }
 
     return [...realTasksToReturn, ...virtualTasks, ...realizedTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }
 
-  // 3. ĐÁNH DẤU QUAN TRỌNG (HỖ TRỢ TỰ ĐỘNG TÁCH TASK ẢO)
   async markAsImportant(id: string, userId: string, isImportant: boolean): Promise<Task> {
     if (id.startsWith('virtual_')) {
       const parts = id.split('_');
@@ -236,17 +245,14 @@ export class TasksService {
     }
   }
 
-  // 4. KIỂM TRA CHU KỲ (THUẬT TOÁN)
   public checkIfDateMatchesRule(targetDate: Date, master: any): boolean {
     const start = new Date(master.startDate);
     start.setUTCHours(0,0,0,0);
     const target = new Date(targetDate);
     target.setUTCHours(0,0,0,0);
-    
-    // 1. Kiểm tra ngày bắt đầu
+
     if (target < start) return false;
 
-    // 2. Kiểm tra ngày kết thúc chuỗi lặp
     if (master.endRepeatDate) {
       const endRepeat = new Date(master.endRepeatDate);
       endRepeat.setUTCHours(23, 59, 59, 999); 
@@ -288,7 +294,6 @@ export class TasksService {
     }
   }
 
-  // 5. BIẾN TASK ẢO THÀNH THẬT KHI USER TƯƠNG TÁC
   async realizeVirtualTask(userId: string, masterId: string, dueDate: string, updateData: UpdateTaskDto): Promise<Task> {
     const masterTask = await this.taskModel.findById(masterId).exec();
     if (!masterTask || masterTask.userId.toString() !== userId) {
