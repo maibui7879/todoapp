@@ -13,28 +13,18 @@ export class TasksService {
     @InjectModel(Category.name) private categoryModel: Model<CategoryDocument>,
   ) {}
 
-async create(userId: string, createTaskDto: CreateTaskDto): Promise<Task> {
+// 1. TẠO CÔNG VIỆC MỚI
+  async create(userId: string, createTaskDto: CreateTaskDto): Promise<Task> {
     const { categoryName, ...taskData } = createTaskDto;
 
-    // --- THÊM VALIDATION KHÔNG CHO PHÉP TẠO TASK TRONG QUÁ KHỨ ---
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0); // Đưa về mốc 0h00 để cho phép tạo task trong ngày hiện tại
+    const now = new Date();
+    const taskDueDate = new Date(taskData.dueDate);
 
-    const taskDueDateCompare = new Date(taskData.dueDate);
-    taskDueDateCompare.setUTCHours(0, 0, 0, 0);
-
-    if (taskDueDateCompare < today) {
-      throw new BadRequestException('Không được phép tạo công việc với ngày đến hạn (dueDate) trong quá khứ.');
+    // CHỈ CHẶN DUE DATE Ở QUÁ KHỨ
+    if (taskDueDate < now) {
+      throw new BadRequestException('Không được phép tạo công việc với thời gian đến hạn (dueDate) trong quá khứ.');
     }
 
-    // Nếu là Task lặp lại có truyền startDate, cũng không được để startDate trong quá khứ
-    if (taskData.isMaster && taskData.startDate) {
-      const taskStartDate = new Date(taskData.startDate);
-      taskStartDate.setUTCHours(0, 0, 0, 0);
-      if (taskStartDate < today) {
-        throw new BadRequestException('Không được phép đặt ngày bắt đầu chu kỳ lặp (startDate) trong quá khứ.');
-      }
-    }
     let finalCategoryId: Types.ObjectId | undefined = undefined;
 
     if (categoryName) {
@@ -53,7 +43,10 @@ async create(userId: string, createTaskDto: CreateTaskDto): Promise<Task> {
       finalCategoryId = category._id as Types.ObjectId;
     }
 
-    const startDate = taskData.isMaster ? new Date(taskData.dueDate) : undefined;
+    // Ưu tiên lấy startDate từ request, nếu không có mới lấy dueDate làm mốc bắt đầu
+    const startDate = taskData.isMaster 
+      ? (taskData.startDate ? new Date(taskData.startDate) : new Date(taskData.dueDate)) 
+      : undefined;
 
     const newTask = new this.taskModel({
       ...taskData,
@@ -64,6 +57,7 @@ async create(userId: string, createTaskDto: CreateTaskDto): Promise<Task> {
     
     return newTask.save();
   }
+
 
   async findAll(
       userId: string, 
