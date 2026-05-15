@@ -5,7 +5,7 @@ import { Task, TaskDocument, RepeatUnit } from './entities/task.entity';
 import { Category, CategoryDocument } from '../categories/entities/category.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
-
+import { RepeatStrategyFactory } from './strategies/repeat.strategy';
 @Injectable()
 export class TasksService {
   constructor(
@@ -245,7 +245,7 @@ async create(userId: string, createTaskDto: CreateTaskDto): Promise<Task> {
     }
   }
 
-  public checkIfDateMatchesRule(targetDate: Date, master: any): boolean {
+public checkIfDateMatchesRule(targetDate: Date, master: any): boolean {
     const start = new Date(master.startDate);
     start.setUTCHours(0,0,0,0);
     const target = new Date(targetDate);
@@ -259,39 +259,11 @@ async create(userId: string, createTaskDto: CreateTaskDto): Promise<Task> {
       if (target > endRepeat) return false;
     }
 
-    const diffTime = target.getTime() - start.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const strategy = RepeatStrategyFactory.getStrategy(master.repeatUnit);
+ 
+    if (!strategy) return false;
 
-    switch (master.repeatUnit) {
-      case RepeatUnit.DAILY:
-        return diffDays % master.repeatInterval === 0;
-      
-      case RepeatUnit.FIXED_DAYS: {
-        const targetDayOfWeek = target.getUTCDay(); // 0 là CN, 1 là T2...
-        if (master.repeatDays && master.repeatDays.length > 0) {
-          return master.repeatDays.includes(targetDayOfWeek);
-        }
-        return false;
-      }
-      
-      case RepeatUnit.WEEKLY:
-        return diffDays % (7 * master.repeatInterval) === 0;
-      
-      case RepeatUnit.MONTHLY: {
-        if (start.getUTCDate() !== target.getUTCDate()) return false; 
-        const monthDiff = (target.getUTCFullYear() - start.getUTCFullYear()) * 12 + (target.getUTCMonth() - start.getUTCMonth());
-        return monthDiff % master.repeatInterval === 0;
-      }
-      
-      case RepeatUnit.YEARLY: {
-        if (start.getUTCDate() !== target.getUTCDate() || start.getUTCMonth() !== target.getUTCMonth()) return false;
-        const yearDiff = target.getUTCFullYear() - start.getUTCFullYear();
-        return yearDiff % master.repeatInterval === 0;
-      }
-
-      default:
-        return false;
-    }
+    return strategy.matches(target, start, master);
   }
 
   async realizeVirtualTask(userId: string, masterId: string, dueDate: string, updateData: UpdateTaskDto): Promise<Task> {
